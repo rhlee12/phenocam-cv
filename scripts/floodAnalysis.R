@@ -67,9 +67,10 @@ floodAnalysis<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="2019-12-3
     #download a bunch of images, flooded and non-flooded from the phenocam network (full year of data from Dead Lake):
     dateSeq<-getImageDates
     #seq.Date(from = as.Date(dateStart),to = as.Date(dateEnd),by = "day")
-    #browser()
+    browser()
     #get the lat/lon for the NEON site:
     metaSite<-Z10::get.site.meta(site = picSite)
+    browser()
     siteLat<-metaSite$site.latitude
     siteLon<-metaSite$site.longitude
     #for each date, get the sunset time:
@@ -166,6 +167,7 @@ floodAnalysis<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="2019-12-3
     
     #go thru each image, convert to grayscale, change dimensions, and save
     for(i in 1:length(imagePath[!is.na(imagePath)])){ #length(imagePath[!is.na(imagePath)])
+      browser()
       ## Download the image
       img_raw<-imager::load.image(imagePath[!is.na(imagePath)][[i]])
       ## Convert to grayscale
@@ -191,7 +193,7 @@ floodAnalysis<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="2019-12-3
 
   #Open all the images, convert to matrix, 
   
-
+  browser()
   #open the nominal images if they already exist:
   setwd("C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/train/")
   openThese.raw<-sapply(paste0("img_small_",picSite,"_",getDates,"_",picTime,".rds"), function(x) list.files(pattern=x))
@@ -200,10 +202,7 @@ floodAnalysis<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="2019-12-3
   imagesRaw<-lapply(openThese.cln, function(x) readRDS(x))
   #name the images so we can keep track of dates etc.
   names(imagesRaw)<-names(openThese.cln)
-  #open the metadata file:
-  siteMetadata<-read.csv(paste0(picSite,"_metadata.csv"),header = T,stringsAsFactors = F)
-  
-  
+ 
   # get the latest image, load with magick
   #imgs<-lapply(imagePath[!is.na(imagePath)], function(x) imager::load.image(x))
   
@@ -245,26 +244,153 @@ floodAnalysis<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="2019-12-3
     ## Coerce to a vector
     img_vector[[i]] <- as.vector(t(img_matrix))
   }
+  ## bind the list of vector into matrix
+  feature_matrix <- do.call(rbind, img_vector)
+  feature_matrix <- as.data.frame(feature_matrix)
+  #open the metadata file:
+  siteMetadata<-read.csv(paste0(picSite,"_metadata.csv"),header = T,stringsAsFactors = F)
+  #add labels:
+  label<-siteMetadata$tag
+  ## Add label
+  feature_matrix <- cbind(label = label, feature_matrix)
+  
+  
   #}
   browser()
   
   
-  
+  ### manual labels ####
   #add labels to each image by looking thru each and noting if it's dry (0) or flooded (1)
   #ind.floodEnd1<-grep("2019_01_08",names(grayimg))
   #ind.floodEnd2<-grep("2019_02_21",names(grayimg))
   #ind.floodEnd3<-grep("2019_03_06",names(grayimg))
-  label<-c(rep(1,ind.floodEnd1),rep(0,ind.floodEnd2-ind.floodEnd1),rep(1,ind.floodEnd3-ind.floodEnd2),
-           rep(0,length(grayimg)-(ind.floodEnd3)))
-  
-  ## bind the list of vector into matrix
-  feature_matrix <- do.call(rbind, img_vector)
-  feature_matrix <- as.data.frame(feature_matrix)
+  # label<-c(rep(1,ind.floodEnd1),rep(0,ind.floodEnd2-ind.floodEnd1),rep(1,ind.floodEnd3-ind.floodEnd2),
+  #          rep(0,length(grayimg)-(ind.floodEnd3)))
+  ### manual labels ####
+
   ## Set names
   #names(feature_matrix) <- paste0("pixel", c(1:img_size))
   #if (add_label) {
-  ## Add label
-  feature_matrix <- cbind(label = label, feature_matrix)
+  
+  
+  ### Create the model
+  # 3 Train the Model
+  library(caret)
+  ## Bind rows in a single dataset
+  #complete_set <- rbind(cats_data, dogs_data)
+  ## test/training partitions
+  training_index <- createDataPartition(feature_matrix$label, p = .8, times = 1)
+  training_index <- unlist(training_index)
+  train_set <- feature_matrix[training_index,]
+  dim(train_set)
+  #create the test set:
+  test_set <- feature_matrix[-training_index,]
+  dim(test_set)
+  ## Fix train and test datasets
+  train_data <- data.matrix(train_set)
+  #remove the label column before running simulation:
+  train_x <- t(train_data[, -1])
+  train_y <- train_data[,1]
+  train_array <- train_x
+  #define width and height:
+  width<-dim(imagesRaw[[1]])[1]
+  height<-dim(imagesRaw[[1]])[2]
+  dim(train_array) <- c(width, height, 1, ncol(train_x))
+  test_data <- data.matrix(test_set)
+  test_x <- t(test_set[,-1])
+  test_y <- test_set[,1]
+  test_array <- test_x
+  dim(test_array) <- c(height, width, 1, ncol(test_x))
+
+  #building the actual model:
+  library(mxnet)
+  ## Model
+  mx_data <- mx.symbol.Variable('data')
+  ## 1st convolutional layer 5x5 kernel and 20 filters.
+  conv_1 <- mx.symbol.Convolution(data = mx_data, kernel = c(5, 5), num_filter = 20) #20
+  tanh_1 <- mx.symbol.Activation(data = conv_1, act_type = "tanh")
+  pool_1 <- mx.symbol.Pooling(data = tanh_1, pool_type = "max", kernel = c(2, 2), stride = c(2,2 ))
+  ## 2nd convolutional layer 5x5 kernel and 50 filters.
+  conv_2 <- mx.symbol.Convolution(data = pool_1, kernel = c(5,5), num_filter = 50) #50
+  tanh_2 <- mx.symbol.Activation(data = conv_2, act_type = "tanh")
+  pool_2 <- mx.symbol.Pooling(data = tanh_2, pool_type = "max", kernel = c(2, 2), stride = c(2, 2))
+  ## 1st fully connected layer
+  flat <- mx.symbol.Flatten(data = pool_2)
+  fcl_1 <- mx.symbol.FullyConnected(data = flat, num_hidden = 500) #500
+  tanh_3 <- mx.symbol.Activation(data = fcl_1, act_type = "tanh")
+  ## 2nd fully connected layer
+  fcl_2 <- mx.symbol.FullyConnected(data = tanh_3, num_hidden = 2)
+  ## Output
+  NN_model <- mx.symbol.SoftmaxOutput(data = fcl_2)
+
+  ## Set seed for reproducibility
+  mx.set.seed(100)
+
+  ## Device used. Sadly not the GPU :-(
+  device <- mx.cpu()
+
+  ## Train on 1200 samples
+  model <- mx.model.FeedForward.create(NN_model, X = train_array, y = train_y,
+                                       ctx = device,
+                                       num.round = 10,
+                                       array.batch.size = 100,
+                                       learning.rate = 0.05,
+                                       momentum = 0.9,
+                                       wd = 0.00001,
+                                       eval.metric = mx.metric.accuracy,
+                                       epoch.end.callback = mx.callback.log.train.metric(100))
+  ## Test test set
+  predict_probs <- predict(model, test_array)
+  #predict_probs <- predict.MXFeedForwardModel(model, test_array)
+  predicted_labels <- max.col(t(predict_probs)) - 1
+  table(test_data[, 1], predicted_labels)
+
+  #get the accuracy of the model:
+  sum(diag(table(test_data[, 1], predicted_labels)))/length(test_data[, 1])
+
+
+  ### old school mxnet function:
+  predict.MXFeedForwardModel <- function(model, X, ctx=NULL, array.batch.size=128, array.layout="auto") {
+    if (is.null(ctx)) ctx <- mx.ctx.default()
+    if (is.array(X) || is.matrix(X)) {
+      if (array.layout == "auto") {
+        array.layout <- mxnmx.model.select.layout.predict(X, model)
+      }
+      if (array.layout == "rowmajor") {
+        X <- t(X)
+      }
+    }
+    X <- mx.model.init.iter(X, NULL, batch.size=array.batch.size, is.train=FALSE)
+    print('itterSet')
+    X$reset()
+    if (!X$iter.next()) stop("Cannot predict on empty iterator")
+    dlist = X$value()
+    pexec <- mx.simple.bind(model$symbol, ctx=ctx, data=dim(dlist$data), grad.req="null")
+    mx.exec.update.arg.arrays(pexec, model$arg.params, match.name=TRUE)
+    mx.exec.update.aux.arrays(pexec, model$aux.params, match.name=TRUE)
+    packer <- mx.nd.arraypacker()
+    X$reset()
+    while (X$iter.next()) {
+      dlist = X$value()
+      mx.exec.update.arg.arrays(pexec, list(data=dlist$data), match.name=TRUE)
+      mx.exec.forward(pexec, is.train=FALSE)
+      out.pred <- mx.nd.copyto(pexec$ref.outputs[[1]], mx.cpu())
+      padded <- X$num.pad()
+      oshape <- dim(out.pred)
+      ndim <- length(oshape)
+      packer$push(mx.nd.slice(out.pred, 0, oshape[[ndim]] - padded))
+    }
+    X$reset()
+    return(packer$get())
+  }
+  
+  
+  
+  
+  
+  
+  
+  
   
 }
 
