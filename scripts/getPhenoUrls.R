@@ -15,11 +15,12 @@
 #'
 
 
-getPhenoUrls=function(site, year=NULL, date, time="1200",IR=T){
+getPhenoUrls=function(site, year=NULL, date, time="1200",IR=T,domn=domain){
   library(Z10)
   #siteMeta=Z10::get.site.meta(site)
   # What domain is our site?
-  domn=Z10::get.site.meta(site)$domain.code
+  
+  #domn=Z10::get.site.meta(site)$domain.code
   
   #pad time to correct format, and make character
   time=stringr::str_pad(string = time, width = 4, side = "left", pad = "0")
@@ -39,9 +40,16 @@ getPhenoUrls=function(site, year=NULL, date, time="1200",IR=T){
                   paste0(month,"/", stringr::str_pad(string = days[[month]], width = 2, side = "left", pad = "0")))
     }
     
+    #if this is a NEON site:
+    if(!is.na(domn)){
+      baseUrl=paste0("https://phenocam.sr.unh.edu/webcam/browse/NEON.", domn, ".", site, ".DP1.00042/", year, "/", monthDays)
+    }
+    else{
+      #if this is not a NEON site:
+      baseUrl=paste0("https://phenocam.sr.unh.edu/webcam/browse/",site, "/", year, "/", monthDays)
+    }
     
-    
-    baseUrls=paste0("https://phenocam.sr.unh.edu/webcam/browse/NEON.", domn, ".", site, ".DP1.00042/", year, "/", monthDays)
+    #baseUrls=paste0("https://phenocam.sr.unh.edu/webcam/browse/NEON.", domn, ".", site, ".DP1.00042/", year, "/", monthDays)
     
     #JOSH CODE
     allUrls=c()
@@ -66,8 +74,15 @@ getPhenoUrls=function(site, year=NULL, date, time="1200",IR=T){
     message("Image downloaded for ",site, " on ", date, " ", time)
     return(allUrls)
   }else if(!missing(date)){
-
-    baseUrl=paste0("https://phenocam.sr.unh.edu/webcam/browse/NEON.", domn, ".", site, ".DP1.00042/", gsub(pattern = "-", replacement = "/", x = date))
+    
+    #if this is a NEON site:
+    if(!is.na(domn)){
+      baseUrl=paste0("https://phenocam.sr.unh.edu/webcam/browse/NEON.", domn, ".", site, ".DP1.00042/", gsub(pattern = "-", replacement = "/", x = date))
+    }
+    else{
+      #if this is not a NEON site:
+      baseUrl=paste0("https://phenocam.sr.unh.edu/webcam/browse/",site, "/", gsub(pattern = "-", replacement = "/", x = date))
+    }
     
     rvest_doc <- xml2::read_html(baseUrl)
     
@@ -86,7 +101,7 @@ getPhenoUrls=function(site, year=NULL, date, time="1200",IR=T){
     }
     
     if(length(timeUrl)==0){timeUrl=NA}
-    message("Image downloaded for ",site, " on ", date, " ", time)
+    message("Image URL obtained for ",site, " on ", date, " ", time)
     return(timeUrl)
   }
 }
