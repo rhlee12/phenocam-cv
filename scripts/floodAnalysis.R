@@ -38,7 +38,7 @@ getSzn<-function(x){
 
 
 floodAnalysis<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="2019-12-31",picTime="sunrise",
-                        picIR=T,rerun=F,useGMT=F){
+                        picIR=T,rerun=F,useGMT=F, lat=NA,lon=NA){
   #set seed for traceability:
   library(magrittr)
   library(rvest)
@@ -67,12 +67,20 @@ floodAnalysis<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="2019-12-3
     #download a bunch of images, flooded and non-flooded from the phenocam network (full year of data from Dead Lake):
     dateSeq<-getImageDates
     #seq.Date(from = as.Date(dateStart),to = as.Date(dateEnd),by = "day")
-    browser()
     #get the lat/lon for the NEON site:
-    metaSite<-Z10::get.site.meta(site = picSite)
+    if(is.na(lat) & is.na(lon)){
+      #open the NEON field site csv to get the lat and lon info:
+      metadata<-read.csv('C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/fieldSitesNEON.csv',header = T,stringsAsFactors = F)
+      #find the site of interest
+      metaSite<-metadata[grep(picSite,metadata$Site.ID),]
+      siteLat<-metaSite$Latitude
+      siteLon<-metaSite$Longitude
+    }
+    else{
+      siteLat<-lat
+      siteLon<-lon
+    }
     browser()
-    siteLat<-metaSite$site.latitude
-    siteLon<-metaSite$site.longitude
     #for each date, get the sunset time:
     sunTimes<-read_html(paste0("https://www.esrl.noaa.gov/gmd/grad/solcalc/table.php?lat=",siteLat,"&lon=",siteLon,"&year=",substr(dateStart,0,4)))
     #scrape the webpage and get the applicable sun info:
