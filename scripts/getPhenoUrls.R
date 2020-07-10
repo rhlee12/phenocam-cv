@@ -14,7 +14,6 @@
 #' @export
 #'
 
-
 getPhenoUrls=function(site, year=NULL, date, time="1200",IR=T,domn=domain){
   library(Z10)
   #siteMeta=Z10::get.site.meta(site)
@@ -102,6 +101,7 @@ getPhenoUrls=function(site, year=NULL, date, time="1200",IR=T,domn=domain){
     
     if(length(timeUrl)==0){timeUrl=NA}
     message("Image URL obtained for ",site, " on ", date, " ", time)
+    
     return(timeUrl)
   }
 }

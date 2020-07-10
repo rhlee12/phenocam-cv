@@ -1,263 +1,32 @@
-#' @title Model to detect flooding at NEON sites
-#'
-#' @author Josh 
-#'
-#' @details Will inform if a NEON site was flooded on a given day.
-#'
-#' @param picSite The 4-Letter site code for a NEON site. Please, no OKSR.
-#' @param dateStart start date of phenocam images to download
-#' @param dateEnd end date of phenocam images to download
-#' @param picTime a character expression of either 'sunrise', 'solarNoon', or 'sunset'.  The code will download the picture(s) dynamically as a function of the specified picTime.  
-#'                For example, If 'sunset' is chosen, the images downloaded will be within +/- 15 minutes of local sunset time. 
-#' @param picIR If TRUE, the images downloaded will be infrared (IR).  If FALSE, the images downloaded will be visible light, RGB.
-#' @param rerun if TRUE, images will be downloaded regardless of whether or not they've already been downloaded and stored
-#' @param useGMT if TRUE, images will be downloaded using GMT time.  If FALSE, images will be downloaded using local standard time (LST)
-#
-#' @return A list of URLs to the understory phenocam images at the specified time. If no images was recorded on you specified time for a given day, no URL for that day will be returned.
-#'
-#' @export
-#'
 
-
-
-## Example of image classifications from https://rstudio-pubs-static.s3.amazonaws.com/236125_e0423e328e4b437888423d3821626d92.html
-# install.packages("drat", repos="https://cran.rstudio.com")
-# drat:::addRepo("dmlc")
-
-#install.packages("https://s3.ca-central-1.amazonaws.com/jeremiedb/share/mxnet/CPU/mxnet.zip", repos = NULL)
-
-#Define getSeason function:
-# getSzn<-function(x){
-#   browser()
-#   yq <- as.yearqtr(as.yearmon(x, "%m/%d/%Y") + 1/12)
-#   DF$Season <- factor(format(yq, "%q"), levels = 1:4, 
-#                       labels = c("winter", "spring", "summer", "fall"))
-# }
-
-
-
-
-floodAnalysis<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="2019-12-31",picTime="sunrise",
-                        picIR=F,rerun=F,useGMT=F){
-  #set seed for traceability:
-  library(magrittr)
-  library(rvest)
-  library(reshape2)
-  library(lubridate)
-  set.seed(2020)
-  
-  #check to see if any of the data are already saved (don't want to download again)
-  #sequence of dates to run:
-  getDates<-seq.Date(as.Date(dateStart),as.Date(dateEnd),by="day")
-  filenameSeq<-paste0("img_small_",picSite,"_",getDates,"_",picTime,".rds")
-  #list the files in the directory:
-  alreadyRun.raw<-sapply(filenameSeq, function(x) grep(x,list.files(path = "C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/train/")))
-  alreadyRun.cln<-names(alreadyRun.raw)[which(unlist(alreadyRun.raw)!=0)]
-  #make new list that defines what dates still need to be run:
-  getImageDates<-getDates[!getDates %in% as.Date(substr(alreadyRun.cln,16,25))]
-  
-  #are we looking at a NEON site or a non-NEON site:
-  NEONcheck<-grep("[A-Z]{4}",picSite)
-  
-  #filenameRawData<-paste0("C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/train/images_",picSite,"_",dateStart,"_",dateEnd,"_",picTime,".rds")
-  #filenameTruncData<-paste0("C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/train/data_",picSite,"_",dateStart,"_",dateEnd,"_",picTime,".rds")
-  #if(file.exists(filenameRawData)){
-  
-  #If any images need to be downloaded:
-  if(length(getImageDates)!=0){
-    #source the getPhenoCam function:
-    source('C:/Users/jroberti/Git/phenocam-cv/scripts/getPhenoUrls.R', echo=TRUE)
-    #download a bunch of images, flooded and non-flooded from the phenocam network (full year of data from Dead Lake):
-    dateSeq<-getImageDates
-    #seq.Date(from = as.Date(dateStart),to = as.Date(dateEnd),by = "day")
-    #check to see if a NEON site was entered:
-    if(length(NEONcheck)!=0){
-      #open the NEON field site csv to get the lat and lon info:
-      metadata<-read.csv('C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/fieldSitesNEON.csv',header = T,stringsAsFactors = F)
-      #find the site of interest
-      metaSite<-metadata[grep(picSite,metadata$Site.ID),]
-      siteLat<-metaSite$Latitude
-      siteLon<-metaSite$Longitude
-      
-    }
-    else{
-      #get the site's lat and lon directly from the phenocam website:
-      metaSite<-read_html(paste0("https://phenocam.sr.unh.edu/webcam/sites/",picSite,"/"))
-      #get the lat / lon of the site:
-      info.site<-metaSite %>%
-        html_nodes("script")
-      #remove html tags from the information:
-      info.site<-gsub("<.*?>", "", info.site[1])
-      lat.ind.start<-gregexpr(pattern ="lat",info.site)[[1]][1]
-      lon.ind.start<-gregexpr(pattern ="lon",info.site)[[1]][1]
-      #truncate the string from lat.ind.start to lon.ind.start + (lon.ind.start-lat.ind.start)
-      stringLatLon<-substr(info.site,lat.ind.start,lon.ind.start+(lon.ind.start-lat.ind.start))
-      #get the lat lon values:
-      latLon.drty<-trimws(gsub("[A-z]|;|\n|=","",stringLatLon),"both")
-      #assign lat, lon:
-      siteMeta<-data.frame(t(data.frame(strsplit(x = latLon.drty,split = "\\s+"))),row.names = NULL,stringsAsFactors = F)
-      names(siteMeta)<-c("lat","lon")
-      #siteMeta<-as.character(siteMeta)
-      siteLat<-as.numeric(siteMeta$lat)
-      siteLon<-as.numeric(siteMeta$lon)
-    }
-    #for each date, get the sunset time:
-    sunTimes<-read_html(paste0("https://www.esrl.noaa.gov/gmd/grad/solcalc/table.php?lat=",siteLat,"&lon=",siteLon,"&year=",substr(dateStart,0,4)))
-    #scrape the webpage and get the applicable sun info:
-    info.sun<-sunTimes %>%
-      html_nodes("table") %>%
-      html_table()
-    #name the tables:
-    names(info.sun)<-c("sunrise","sunset","solarNoon")
-    #go thru each table and reshape from short-wide DF to long-tall DF:
-    info.sun2<-melt(info.sun, id.vars="Day")
-    #split back into individual dataframes:
-    info.sun.lst<-split(info.sun2, info.sun2$L1)
-    #go thru each dataframe, clean up the times, correct for daylight saving, get GMT time:
-    for(i in 1:length(info.sun.lst)){
-      #if(i==2){browser()}
-      #only keep rows with legit dates:
-      keepRows<-which(nchar(info.sun.lst[[i]]$value)!=0)
-      info.sun.lst[[i]]<-info.sun.lst[[i]][keepRows,]
-      #create a date format similar to the one in dateSeq.vec:
-      info.sun.lst[[i]]$date<-as.Date(paste0(as.character(info.sun.lst[[i]]$variable),"-",as.numeric(info.sun.lst[[i]]$Day),"-",substr(dateStart,0,4)),format = "%b-%d-%Y")
-      #create a new column, time_GMT, that includes offset:
-      offsetTZ<-sunTimes %>%
-        html_nodes("h4")
-      #clean and convert to numeric absolute value:
-      offsetTZ<-abs(as.numeric(gsub("[A-z]|/|:","",gsub("<.*?>","",offsetTZ[1]))))
-      #make sure the value column is only hh:mm and not a combo of hh:mm and hh:mm:ss
-      info.sun.lst[[i]]$value<-substr(info.sun.lst[[i]]$value,0,5)
-      #is this a non NEON site?  If So, round images to 15 minutes:
-      if(length(NEONcheck)!=0){
-        #round the time to the nearest 15 minutes:
-        info.sun.lst[[i]]$roundValue<-format(lubridate::round_date(as.POSIXct(info.sun.lst[[i]]$value,format="%H:%M"),unit = "15 minutes"),"%H:%M")
-      }
-      else{
-        #if not, round to 20 and 50 minutes past the hour:
-        browser()
-      }
-      
-      #identify where daylight saving dates: (for some reason some times aren't exactly at 3600, 1 hour, diff)
-      index.DT<-which(diff(as.numeric(hm(info.sun.lst[[i]]$value)))>=3400)
-      index.ST<-which(diff(as.numeric(hm(info.sun.lst[[i]]$value)))<=-3400)
-      #correct the GMT times using the daylight and standard time indices:
-      fixTimes<-seq(index.DT+1,index.ST-1,1)
-      #convert all $value cols to hm() class in lubridate:
-      info.sun.lst[[i]]$time_ST<-hm(info.sun.lst[[i]]$roundValue)
-      #subtract 1 hour from the daylight saving sequence values and GMT_times:
-      info.sun.lst[[i]]$time_ST[fixTimes]<-info.sun.lst[[i]]$time_ST[fixTimes]-hours(1)
-      #create GMT time:
-      info.sun.lst[[i]]$time_GMT<-info.sun.lst[[i]]$time_ST+hours(offsetTZ)
-      #create another column that defines what image time to pull based on sunrise, solar noon, or sunset:
-      #if(info.sun.lst[[i]]$L1[1]=="solarNoon"){
-      
-      if(useGMT==T){
-        #set the picture time to applicable GMT time:
-        info.sun.lst[[i]]$picTime<-info.sun.lst[[i]]$time_GMT
-      }
-      else{
-        #else set picture time to local standard time:
-        info.sun.lst[[i]]$picTime<-info.sun.lst[[i]]$time_ST
-      }
-      #convert the picTime column to a "HHmm" format: (need this for accessing phenoCam URLs)
-      lubTime<-hm(gsub(" 0S","",info.sun.lst[[i]]$picTime))
-      charMin<-minute(lubTime)
-      fixMinutes<-which(nchar(minute(lubTime))==1)
-      charMin[fixMinutes]<-paste0("0",minute(lubTime)[fixMinutes])
-      info.sun.lst[[i]]$picTimeHHMM<-paste0(hour(lubTime),charMin)
-      #truncate the dates to those in dateSeq:
-      info.sun.lst[[i]]<-merge(data.frame(dateSeq),info.sun.lst[[i]],by.x="dateSeq",by.y="date")
-    }
-    #melt the dataframes back:
-    info.sun.df<-data.frame(do.call(rbind,info.sun.lst),row.names = NULL)
-    
-    #correct for times >=2400:
-    info.sun.df$picTimeHHMM[grep("24H",info.sun.df$picTime)]<-"2359"
-    
-    
-    browser()
-    
-    #assign seasons to the dates:
-    # getSzn()
-    
-    
-    #
-    #assign season to date:
-    #dateSeq.df<-data.frame(date=dateSeq.vec,season=NA)
-    #dateSeq<-seq.Date(from = as.Date("2018-12-30"),to = as.Date("2019-12-31"),by = "day")
-    
-    
-    #subset the dataframe to the correct time of day: sunrise, solarNoon, or sunset:
-    info.sun.use<-info.sun.df[grep(picTime,info.sun.df$L1),]
-    
-    #define the sites domain (if NEON site)
-    #browser()
-    if(length(NEONcheck)!=0){
-      domain<-metaSite$Domain.Number
-    }
-    else{
-      domain<-NA
-    }
-    imagePath<-list()
-    #browser()
-    for(j in 1:length(info.sun.use$picTimeHHMM)){
-      imagePath[[j]]<-getPhenoUrls(site = picSite,year = substr(dateStart,0,4),date = info.sun.use$date[j],
-                                   time = info.sun.use$picTimeHHMM[j],IR=picIR,domn=domain)
-    }
-    #browser()
-    
-    #imagePath<-lapply(dateSeq, function(x) getPhenoUrls(site = picSite,year = substr(dateStart,0,4),date = x,time = picTime,IR=picIR))
-    browser()
-    #load a sample image:
-    sampleImg<-imager::load.image(imagePath[!is.na(imagePath)][[1]])
-    #set the height and width of the image:
-    width<-round(0.2 * dim(sampleImg)[1],0)
-    height<-round((dim(sampleImg)[2]/dim(sampleImg)[1]*width),0)
-    
-    #go thru each image, convert to grayscale, change dimensions, and save
-    for(i in 1:length(imagePath[!is.na(imagePath)])){ #length(imagePath[!is.na(imagePath)])
-      #browser()
-      ## Download the image
-      img_raw<-imager::load.image(imagePath[!is.na(imagePath)][[i]])
-      ## convert the grayscale image size to something smaller:
-      img_small <- imager::resize(img_raw, size_x = width, size_y =  height)
-      ### SAVE THE img_small and img_matrix for future analysis:
-      saveRDS(object = img_small, file = paste0("C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/train/img_small_",picSite,"_",info.sun.use$date[i],"_",picTime,".rds"))
-      #saveRDS(object = img_small, file = paste0("C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/train/img_small_",picSite,"_",info.sun.use$date[i],"_",picTime,".rds"))
-      
-      #plot image and get date for title:
-      #date_plot<-stringr::str_sub(imagePath[!is.na(imagePath)][[i]],-21,-12)
-      #plot(grayimg[[i]],main=date_plot)
-      
-      #grayimg@.Data
-      ## Get the image as a matrix
-      #img_matrix <- as.matrix(img_small)
-      
-      ## Coerce to a vector
-      #img_vector[[i]] <- as.vector(t(img_matrix))
-    }#end for loop
-  }
-
-  #Open all the images, convert to matrix, 
-  
-  browser()
-  #open the nominal images if they already exist:
+floodAnalysis<-function(picTime="solarNoon"){
+  #open images with applicable picTime:
   setwd("C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/train/")
-  openThese.raw<-sapply(paste0("img_small_",picSite,"_",getDates,"_",picTime,".rds"), function(x) list.files(pattern=x))
+
+  #openThese.raw<-sapply(paste0("img_small_",picSite,"_",getDates,"_",picTime,".rds"), function(x) list.files(pattern=x))
+  openThese.raw<-sapply(paste0("*_solarNoon.rds"), function(x) list.files(pattern=x))
   #make sure the file has data:
   openThese.cln<-openThese.raw[which(sapply(openThese.raw, function(x) length(x))==1)]
   imagesRaw<-lapply(openThese.cln, function(x) readRDS(x))
   #name the images so we can keep track of dates etc.
-  names(imagesRaw)<-names(openThese.cln)
- 
+  names(imagesRaw)<-gsub(".rds","",substr(openThese.cln,11,nchar(openThese.cln)))
+  
+  
+  #quick exploratory stuff: https://cran.r-project.org/web/packages/imager/vignettes/gettingstarted.html
+  # library(ggplot2)
+  # library(dplyr)
+  # bdf <- as.data.frame(imagesRaw[[2]])
+  # head(bdf,3)
+  # bdf <- mutate(bdf,channel=factor(cc,labels=c('R','G','B')))
+  # ggplot(bdf,aes(value,col=channel))+geom_histogram(bins=30)+facet_wrap(~ channel)
+  
   # get the latest image, load with magick
   #imgs<-lapply(imagePath[!is.na(imagePath)], function(x) imager::load.image(x))
   
   #set the height and width of the images to something smaller than nominal image, but keep aspect ratio
   #imagePath<-getPhenoUrls(site = "DELA",year = 2019,date = "2019-01-01",time = "0800",IR=T)
   #sampleImg<-imager::load.image(imagePath[!is.na(imagePath)][[1]])
-
+  
   
   #download each image, convert to grayscale and change dimensions:
   #grayimg<-readRDS("C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/train/images_DELA.rds")
@@ -265,15 +34,15 @@ floodAnalysis<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="2019-12-3
   #initialize img_vector 
   #img_vector<-list()
   #if(length(imagePath)==1){
-    #img_vector<-list()
-    #img_save<-list()
-    
-    #name the images by the date:
-    #names(grayimg)<-paste0("img_",stringr::str_sub(unlist(imagePath[!is.na(imagePath)]),-21,-12))
-    #save all the grayscale images and the vector data:
-    
-    #grayimg<-readRDS("C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/train/images_DELA.rds")
-    
+  #img_vector<-list()
+  #img_save<-list()
+  
+  #name the images by the date:
+  #names(grayimg)<-paste0("img_",stringr::str_sub(unlist(imagePath[!is.na(imagePath)]),-21,-12))
+  #save all the grayscale images and the vector data:
+  
+  #grayimg<-readRDS("C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/train/images_DELA.rds")
+  
   #}else{
   img_vector<-list()
   for(i in 1:length(imagesRaw)){ #length(imagePath[!is.na(imagePath)])
@@ -284,7 +53,7 @@ floodAnalysis<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="2019-12-3
     
     ########## CONVERT TO GRAYSCALE OR GET TGB RATIOS ######
     ## Convert to grayscale 
-    #img_gray <- imager::grayscale(imagesRaw[[i]])
+    img_gray <- imager::grayscale(imagesRaw[[i]])
     ## or create ratio of RGB vectors:
     ############## Decide what to do here ########
     ## Set to grayscale
@@ -293,7 +62,8 @@ floodAnalysis<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="2019-12-3
     #date_plot<-stringr::str_sub(imagePath[!is.na(imagePath)][[i]],-21,-12)
     #plot(grayimg[[i]],main=date_plot)
     ## Get the image as a matrix
-    img_matrix <- as.matrix(imagesRaw[[i]])
+    img_matrix <- as.matrix(imagesRaw[[i]][,,,1])/as.matrix(imagesRaw[[i]][,,,2])
+    #img_matrix <- as.matrix(img_gray)
     #grayimg@.Data
     ## Coerce to a vector
     img_vector[[i]] <- as.vector(t(img_matrix))
@@ -301,16 +71,42 @@ floodAnalysis<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="2019-12-3
   ## bind the list of vector into matrix
   feature_matrix <- do.call(rbind, img_vector)
   feature_matrix <- as.data.frame(feature_matrix)
+  #add the image names to the feature_matrix to preserve traceability:
+  feature_matrix$metaname<-gsub("_solarNoon|sunrise|sunset","",names(imagesRaw))
+  
   #open the metadata file:
-  siteMetadata<-read.csv(paste0(picSite,"_metadata.csv"),header = T,stringsAsFactors = F)
+  #siteMetadata<-read.csv(paste0(picSite,"_metadata.csv"),header = T,stringsAsFactors = F)
+  siteMetadata<-read.csv("C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/site_metadata.csv",header = T,stringsAsFactors = F)
+  #get site names:
+  sites<-names(siteMetadata)[2:ncol(siteMetadata)]
+  #convert stupid excel dates to POSIX:
+  siteMetadata$posix<-as.Date(siteMetadata$date,format = "%m/%d/%Y")
+  #Tmap the name of each image to the appropriate tag for a specific site:
+  site.meta.lst<-list()
+  for(j in 1:length(sites)){
+    site.meta.tags<-siteMetadata[,grep(paste0(sites[j],"|posix"),names(siteMetadata))]
+    #create a string that matches the feature_matrix$metaname:
+    site.meta.tags$metaname<-paste0(names(site.meta.tags)[grep(sites[j],names(site.meta.tags))],"_",site.meta.tags$posix)
+    #output:
+    site.meta.lst[[j]]<-site.meta.tags
+    #rename so I can do.call:
+    names(site.meta.lst[[j]])<-c("tag","posix","metaname")
+  }
+  #do.call into one dataframe:
+  site.meta.df<-do.call(rbind,site.meta.lst)
+  #merge 'site.meta.df' with 'feature_matrix'
+  metadata.full<-merge(site.meta.df,feature_matrix,by="metaname")
   #add labels:
-  label<-siteMetadata$tag
+  label<-metadata.full$tag
   ## Add label
   feature_matrix <- cbind(label = label, feature_matrix)
-  
-  
+  #remove the metaname and posix columns:
+  rmvCol<-grep("metaname|posix",names(feature_matrix))
+  if(length(rmvCol)!=0){
+    feature_matrix<-feature_matrix[,-rmvCol]
+  }
   #}
-  browser()
+  
   
   
   ### manual labels ####
@@ -321,7 +117,7 @@ floodAnalysis<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="2019-12-3
   # label<-c(rep(1,ind.floodEnd1),rep(0,ind.floodEnd2-ind.floodEnd1),rep(1,ind.floodEnd3-ind.floodEnd2),
   #          rep(0,length(grayimg)-(ind.floodEnd3)))
   ### manual labels ####
-
+  
   ## Set names
   #names(feature_matrix) <- paste0("pixel", c(1:img_size))
   #if (add_label) {
@@ -355,7 +151,7 @@ floodAnalysis<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="2019-12-3
   test_y <- test_set[,1]
   test_array <- test_x
   dim(test_array) <- c(height, width, 1, ncol(test_x))
-
+  
   #building the actual model:
   library(mxnet)
   ## Model
@@ -376,13 +172,13 @@ floodAnalysis<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="2019-12-3
   fcl_2 <- mx.symbol.FullyConnected(data = tanh_3, num_hidden = 2)
   ## Output
   NN_model <- mx.symbol.SoftmaxOutput(data = fcl_2)
-
+  
   ## Set seed for reproducibility
   mx.set.seed(100)
-
+  
   ## Device used. Sadly not the GPU :-(
   device <- mx.cpu()
-
+  
   ## Train on 1200 samples
   model <- mx.model.FeedForward.create(NN_model, X = train_array, y = train_y,
                                        ctx = device,
@@ -398,11 +194,11 @@ floodAnalysis<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="2019-12-3
   #predict_probs <- predict.MXFeedForwardModel(model, test_array)
   predicted_labels <- max.col(t(predict_probs)) - 1
   table(test_data[, 1], predicted_labels)
-
+  
   #get the accuracy of the model:
   sum(diag(table(test_data[, 1], predicted_labels)))/length(test_data[, 1])
-
-
+  
+  
   ### old school mxnet function:
   predict.MXFeedForwardModel <- function(model, X, ctx=NULL, array.batch.size=128, array.layout="auto") {
     if (is.null(ctx)) ctx <- mx.ctx.default()
@@ -437,15 +233,6 @@ floodAnalysis<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="2019-12-3
     X$reset()
     return(packer$get())
   }
-  
-  
-  
-  
-  
-  
-  
-  
-  
 }
 
 # #set seed for traceability:
