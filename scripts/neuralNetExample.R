@@ -105,26 +105,31 @@ imageDir<-"C:/Users/jroberti/Kaggle/imgClassification/train/"
 
 
 ### open the cat and dog .rds files:
-
-
+cats_data<-readRDS("C:/Users/jroberti/Kaggle/imgClassification/cat.rds")
+dogs_data<-readRDS("C:/Users/jroberti/Kaggle/imgClassification/dog.rds")
 
 ## 3 Train the Model
 library(caret)
 ## Bind rows in a single dataset
 complete_set <- rbind(cats_data, dogs_data)
+#make smaller batches of the datasets:
+model_set<-complete_set[sample(nrow(complete_set), round(nrow(complete_set)*0.05,0)), ]
+  #complete_set
+  
+
 ## test/training partitions
-training_index <- createDataPartition(complete_set$label, p = .9, times = 1)
+training_index <- createDataPartition(model_set$label, p = .9, times = 1)
 training_index <- unlist(training_index)
-train_set <- complete_set[training_index,]
+train_set <- model_set[training_index,]
 dim(train_set)
 #create the test set:
-test_set <- complete_set[-training_index,]
+test_set <- model_set[-training_index,]
 dim(test_set)
 
 start.time<-Sys.time()
 library(neuralnet)
 # fit neural network
-nn<-neuralnet(label~.,data=train_set, hidden=3,act.fct = "logistic",
+nn<-neuralnet(label~.,data=train_set, hidden=1,act.fct = "logistic",
               linear.output = FALSE)
 ## Prediction using neural network
 #remove the label from test_set
