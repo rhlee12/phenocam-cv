@@ -212,7 +212,6 @@ downloadFloodImages<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="201
       domain<-NA
     }
     imagePath<-list()
-    #browser()
     for(j in 1:length(info.sun.use$picTimeHHMM)){
       imagePath[[j]]<-getPhenoUrls(site = picSite,year = substr(dateStart,0,4),date = info.sun.use$date[j],
                                    time = info.sun.use$picTimeHHMM[j],IR=picIR,domn=domain)

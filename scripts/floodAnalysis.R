@@ -62,8 +62,8 @@ floodAnalysis<-function(picTime="solarNoon"){
     #date_plot<-stringr::str_sub(imagePath[!is.na(imagePath)][[i]],-21,-12)
     #plot(grayimg[[i]],main=date_plot)
     ## Get the image as a matrix
-    img_matrix <- as.matrix(imagesRaw[[i]][,,,1])/as.matrix(imagesRaw[[i]][,,,2])
-    #img_matrix <- as.matrix(img_gray)
+    #img_matrix <- as.matrix(imagesRaw[[i]][,,,1])/as.matrix(imagesRaw[[i]][,,,2])
+    img_matrix <- as.matrix(img_gray)
     #grayimg@.Data
     ## Coerce to a vector
     img_vector[[i]] <- as.vector(t(img_matrix))
@@ -107,8 +107,6 @@ floodAnalysis<-function(picTime="solarNoon"){
   }
   #}
   
-  
-  
   ### manual labels ####
   #add labels to each image by looking thru each and noting if it's dry (0) or flooded (1)
   #ind.floodEnd1<-grep("2019_01_08",names(grayimg))
@@ -145,12 +143,12 @@ floodAnalysis<-function(picTime="solarNoon"){
   #define width and height:
   width<-dim(imagesRaw[[1]])[1]
   height<-dim(imagesRaw[[1]])[2]
-  dim(train_array) <- c(width, height, 1, ncol(train_x))
+  #dim(train_array) <- c(width, height, 1, ncol(train_x)) #run this if using RGB data only??
   test_data <- data.matrix(test_set)
   test_x <- t(test_set[,-1])
   test_y <- test_set[,1]
   test_array <- test_x
-  dim(test_array) <- c(height, width, 1, ncol(test_x))
+  #dim(test_array) <- c(height, width, 1, ncol(test_x)) #run this if using RGB data only
   
   #building the actual model:
   library(mxnet)
@@ -178,6 +176,34 @@ floodAnalysis<-function(picTime="solarNoon"){
   
   ## Device used. Sadly not the GPU :-(
   device <- mx.cpu()
+  browser()
+  
+  library(neuralnet)
+  # fit neural network
+  nn<-neuralnet(label~.,data=train_set, hidden=1,act.fct = "logistic",
+                linear.output = FALSE)
+  ## Prediction using neural network
+  #remove the label from test_set
+  test_label<-test_set$label
+  #remove the label from the test set:
+  col.label<-grep("label",names(test_set))
+  if(length(col.label)!=0){
+    test_set<-test_set[,-col.label]
+  }
+  Predict<-compute(nn,test_set)
+  Predict$net.result
+  # Converting probabilities into binary classes setting threshold level 0.5
+  prob <- Predict$net.result
+  pred.vec <- ifelse(prob>0.5, 1, 0)
+  #combine with the test set labels:
+  pred.df<-data.frame(truth=test_label,pred=pred.vec)
+  #get the accuracy:
+  table(pred.df)
+  sum(diag(table(pred.df$truth, pred.df$pred)))/length(pred.df$truth)
+  Sys.time()-start.time
+  
+  
+  
   
   ## Train on 1200 samples
   model <- mx.model.FeedForward.create(NN_model, X = train_array, y = train_y,
@@ -198,41 +224,42 @@ floodAnalysis<-function(picTime="solarNoon"){
   #get the accuracy of the model:
   sum(diag(table(test_data[, 1], predicted_labels)))/length(test_data[, 1])
   
+  browser()
   
   ### old school mxnet function:
-  predict.MXFeedForwardModel <- function(model, X, ctx=NULL, array.batch.size=128, array.layout="auto") {
-    if (is.null(ctx)) ctx <- mx.ctx.default()
-    if (is.array(X) || is.matrix(X)) {
-      if (array.layout == "auto") {
-        array.layout <- mxnmx.model.select.layout.predict(X, model)
-      }
-      if (array.layout == "rowmajor") {
-        X <- t(X)
-      }
-    }
-    X <- mx.model.init.iter(X, NULL, batch.size=array.batch.size, is.train=FALSE)
-    print('itterSet')
-    X$reset()
-    if (!X$iter.next()) stop("Cannot predict on empty iterator")
-    dlist = X$value()
-    pexec <- mx.simple.bind(model$symbol, ctx=ctx, data=dim(dlist$data), grad.req="null")
-    mx.exec.update.arg.arrays(pexec, model$arg.params, match.name=TRUE)
-    mx.exec.update.aux.arrays(pexec, model$aux.params, match.name=TRUE)
-    packer <- mx.nd.arraypacker()
-    X$reset()
-    while (X$iter.next()) {
-      dlist = X$value()
-      mx.exec.update.arg.arrays(pexec, list(data=dlist$data), match.name=TRUE)
-      mx.exec.forward(pexec, is.train=FALSE)
-      out.pred <- mx.nd.copyto(pexec$ref.outputs[[1]], mx.cpu())
-      padded <- X$num.pad()
-      oshape <- dim(out.pred)
-      ndim <- length(oshape)
-      packer$push(mx.nd.slice(out.pred, 0, oshape[[ndim]] - padded))
-    }
-    X$reset()
-    return(packer$get())
-  }
+  # predict.MXFeedForwardModel <- function(model, X, ctx=NULL, array.batch.size=128, array.layout="auto") {
+  #   if (is.null(ctx)) ctx <- mx.ctx.default()
+  #   if (is.array(X) || is.matrix(X)) {
+  #     if (array.layout == "auto") {
+  #       array.layout <- mxnmx.model.select.layout.predict(X, model)
+  #     }
+  #     if (array.layout == "rowmajor") {
+  #       X <- t(X)
+  #     }
+  #   }
+  #   X <- mx.model.init.iter(X, NULL, batch.size=array.batch.size, is.train=FALSE)
+  #   print('itterSet')
+  #   X$reset()
+  #   if (!X$iter.next()) stop("Cannot predict on empty iterator")
+  #   dlist = X$value()
+  #   pexec <- mx.simple.bind(model$symbol, ctx=ctx, data=dim(dlist$data), grad.req="null")
+  #   mx.exec.update.arg.arrays(pexec, model$arg.params, match.name=TRUE)
+  #   mx.exec.update.aux.arrays(pexec, model$aux.params, match.name=TRUE)
+  #   packer <- mx.nd.arraypacker()
+  #   X$reset()
+  #   while (X$iter.next()) {
+  #     dlist = X$value()
+  #     mx.exec.update.arg.arrays(pexec, list(data=dlist$data), match.name=TRUE)
+  #     mx.exec.forward(pexec, is.train=FALSE)
+  #     out.pred <- mx.nd.copyto(pexec$ref.outputs[[1]], mx.cpu())
+  #     padded <- X$num.pad()
+  #     oshape <- dim(out.pred)
+  #     ndim <- length(oshape)
+  #     packer$push(mx.nd.slice(out.pred, 0, oshape[[ndim]] - padded))
+  #   }
+  #   X$reset()
+  #   return(packer$get())
+  # }
 }
 
 # #set seed for traceability:

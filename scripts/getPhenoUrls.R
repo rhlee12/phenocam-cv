@@ -65,7 +65,7 @@ getPhenoUrls=function(site, year=NULL, date, time="1200",IR=T,domn=domain){
       timeUrls=timeUrls[grep(pattern = paste0("_", time), x = timeUrls)]
       #Add logic for infrared image:
       if(IR==T){
-        timeUrl<-gsub("00042_","00042_IR_",timeUrls)
+        timeUrls<-gsub("00042_","00042_IR_",timeUrls)
       }
       
       allUrls=c(allUrls, timeUrls)
@@ -73,7 +73,6 @@ getPhenoUrls=function(site, year=NULL, date, time="1200",IR=T,domn=domain){
     message("Image downloaded for ",site, " on ", date, " ", time)
     return(allUrls)
   }else if(!missing(date)){
-    
     #if this is a NEON site:
     if(!is.na(domn)){
       baseUrl=paste0("https://phenocam.sr.unh.edu/webcam/browse/NEON.", domn, ".", site, ".DP1.00042/", gsub(pattern = "-", replacement = "/", x = date))
@@ -85,23 +84,31 @@ getPhenoUrls=function(site, year=NULL, date, time="1200",IR=T,domn=domain){
     
     rvest_doc <- xml2::read_html(baseUrl)
     
-    timeUrl <- rvest::html_nodes(rvest_doc,"div") %>%
+    timeUrl.all <- rvest::html_nodes(rvest_doc,"div") %>%
       rvest::html_nodes("img") %>%
       subset(., grepl(pattern = site, x=.)) %>%
       gsub(pattern = "thumbnails", replacement = "archive") %>%
       stringr::str_extract(pattern = "/.*.jpg") %>%
       paste0("https://phenocam.sr.unh.edu", .)
     
-    timeUrl=timeUrl[grep(pattern = paste0("_", time), x = timeUrl)]
+    timeUrl.sngl=timeUrl.all[grep(pattern = paste0("_", time), x = timeUrl.all)]
+    
+    #if nothing matches & timeUrl == 0:
+    if(length(timeUrl.sngl)==0){
+      timeUrl.sngl<-timeUrl.all[grep(pattern = paste0("_", substr(time,0,2)), x = timeUrl.all)]
+      #take the first Url:
+      timeUrl.sngl<-timeUrl.sngl[1]
+    }
+    
     
     #Add logic for infrared image:
     if(IR==T){
-      timeUrl<-gsub("00042_","00042_IR_",timeUrl)
+      timeUrl.sngl<-gsub("00042_","00042_IR_",timeUrl.sngl)
     }
     
-    if(length(timeUrl)==0){timeUrl=NA}
+    if(length(timeUrl.sngl)==0){timeUrl.sngl=NA}
     message("Image URL obtained for ",site, " on ", date, " ", time)
     
-    return(timeUrl)
+    return(timeUrl.sngl)
   }
 }
