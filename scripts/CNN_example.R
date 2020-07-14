@@ -1,10 +1,12 @@
 ### Convolutional Neural Networks in R ###
 #https://www.r-bloggers.com/convolutional-neural-networks-in-r/
+#https://poissonisfish.com/2018/07/08/convolutional-neural-networks-in-r/
 
 library(keras)
 library(EBImage)
 library(stringr)
 library(pbapply)
+library(tensorflow)
 
 
 #set image directory:
@@ -14,11 +16,17 @@ imageDir<-"C:/Users/jroberti/Kaggle/imgClassification/train/"
 width <- 50
 height <- 50
 
-extract_feature <- function(dir_path, width, height, labelsExist = T) {
+extract_feature <- function(dir_path, width, height, labelsExist = T,batchSize=NA) {
   img_size <- width * height
   
-  ## List images in path
+  #get images from file path:
   images_names <- list.files(dir_path)
+  
+  #grab smaller amount of images:
+  if(!is.na(batchSize)){
+    #grab N (batchsize) * random images from the file path:
+    images_names <- images_names[sample(length(images_names), round(length(images_names)*batchSize,0))]
+  }
   
   if(labelsExist){
     ## Select only cats or dogs images
@@ -57,9 +65,9 @@ extract_feature <- function(dir_path, width, height, labelsExist = T) {
 }
 
 ### [START] Create training and test datasets and save them ###
-trainData <- extract_feature(dir_path = imageDir, width, height)
+trainData <- extract_feature(dir_path = imageDir, width, height,batchSize = NA)
 # Takes slightly less
-testData <- extract_feature(dir_path = imageDir, width, height, labelsExist = F)
+testData <- extract_feature(dir_path = imageDir, width, height, labelsExist = F,batchSize = NA)
 #saveRDS(trainData, file = "C:/Users/jroberti/Git/phenocam-cv/data/trainCatsDogs.rds")
 #saveRDS(testData, file = "C:/Users/jroberti/Git/phenocam-cv/data/testCatsDogs.rds")
 ### [END] Create training and test datasets and save them ###
@@ -67,11 +75,11 @@ testData <- extract_feature(dir_path = imageDir, width, height, labelsExist = F)
 #trainData<-readRDS("C:/Users/jroberti/Git/phenocam-cv/data/trainCatsDogs.rds")
 #testData<-readRDS("C:/Users/jroberti/Git/phenocam-cv/data/testCatsDogs.rds")
 
-# Check processing on second cat
+# Check processing on random image
 par(mar = rep(0, 4))
-testCat <- t(matrix(as.numeric(trainData$X[2,]),
+randoImg <- t(matrix(as.numeric(trainData$X[2,]),
                     nrow = width, ncol = height, T))
-image(t(apply(testCat, 2, rev)), col = gray.colors(12),
+image(t(apply(randoImg, 2, rev)), col = gray.colors(12),
       axes = F)
 
 # Fix structure for 2d CNN
@@ -86,8 +94,8 @@ dim(test_array) <- c(50, 50, nrow(testData), 1)
 test_array <- aperm(test_array, c(3,1,2,4))
 
 # Check cat again
-testCat <- train_array[2,,,]
-image(t(apply(testCat, 2, rev)), col = gray.colors(12),
+randoImg <- train_array[2,,,]
+image(t(apply(randoImg, 2, rev)), col = gray.colors(12),
       axes = F)
 
 # Build CNN model
@@ -129,3 +137,26 @@ history <- model %>% fit(
 )
 
 plot(history)
+
+
+# Compute probabilities and predictions on test set
+predictions <-  predict_classes(model, test_array)
+probabilities <- predict_proba(model, test_array)
+
+# Visual inspection of 32 cases
+set.seed(100)
+random <- sample(1:nrow(testData), 32)
+preds <- predictions[random,]
+probs <- as.vector(round(probabilities[random,], 2))
+
+par(mfrow = c(4, 8), mar = rep(0, 4))
+for(i in 1:length(random)){
+  image(t(apply(test_array[random[i],,,], 2, rev)),
+        col = gray.colors(12), axes = F)
+  legend("topright", legend = ifelse(preds[i] == 0, "Cat", "Dog"),
+         text.col = ifelse(preds[i] == 0, 2, 4), bty = "n", text.font = 2)
+  legend("topleft", legend = probs[i], bty = "n", col = "white")
+}
+
+#save the model:
+save(model, file = "C:/Users/jroberti/Git/phenocam-cv/data/CNNmodel.RData")
