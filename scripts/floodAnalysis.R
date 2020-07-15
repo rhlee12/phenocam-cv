@@ -2,77 +2,88 @@
 floodAnalysis<-function(picTime="solarNoon"){
   #open images with applicable picTime:
   setwd("C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/train/")
-
+  
   #openThese.raw<-sapply(paste0("img_small_",picSite,"_",getDates,"_",picTime,".rds"), function(x) list.files(pattern=x))
   openThese.raw<-sapply(paste0("*_solarNoon.rds"), function(x) list.files(pattern=x))
   #make sure the file has data:
   openThese.cln<-openThese.raw[which(sapply(openThese.raw, function(x) length(x))==1)]
   imagesRaw<-lapply(openThese.cln, function(x) readRDS(x))
+  #output message:
+  message("Opening ", length(imagesRaw), " images for analysis")
   #name the images so we can keep track of dates etc.
-  names(imagesRaw)<-gsub(".rds","",substr(openThese.cln,11,nchar(openThese.cln)))
+  names(imagesRaw)<-openThese.cln
+  #open 1 to get the height and width of the image:
+  dir_path<-getwd()
+  img_test <- readRDS(file.path(dir_path, names(imagesRaw)[1]))
+  img_size <- dim(img_test)[1]*dim(img_test)[2]
+    #gsub(".rds","",substr(openThese.cln,11,nchar(openThese.cln)))
   
-  
-  #quick exploratory stuff: https://cran.r-project.org/web/packages/imager/vignettes/gettingstarted.html
-  # library(ggplot2)
-  # library(dplyr)
-  # bdf <- as.data.frame(imagesRaw[[2]])
-  # head(bdf,3)
-  # bdf <- mutate(bdf,channel=factor(cc,labels=c('R','G','B')))
-  # ggplot(bdf,aes(value,col=channel))+geom_histogram(bins=30)+facet_wrap(~ channel)
-  
-  # get the latest image, load with magick
-  #imgs<-lapply(imagePath[!is.na(imagePath)], function(x) imager::load.image(x))
-  
-  #set the height and width of the images to something smaller than nominal image, but keep aspect ratio
-  #imagePath<-getPhenoUrls(site = "DELA",year = 2019,date = "2019-01-01",time = "0800",IR=T)
-  #sampleImg<-imager::load.image(imagePath[!is.na(imagePath)][[1]])
-  
-  
-  #download each image, convert to grayscale and change dimensions:
-  #grayimg<-readRDS("C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/train/images_DELA.rds")
-  
-  #initialize img_vector 
-  #img_vector<-list()
-  #if(length(imagePath)==1){
-  #img_vector<-list()
-  #img_save<-list()
-  
-  #name the images by the date:
-  #names(grayimg)<-paste0("img_",stringr::str_sub(unlist(imagePath[!is.na(imagePath)]),-21,-12))
-  #save all the grayscale images and the vector data:
-  
-  #grayimg<-readRDS("C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/train/images_DELA.rds")
+  #browser()
   
   #}else{
-  img_vector<-list()
-  for(i in 1:length(imagesRaw)){ #length(imagePath[!is.na(imagePath)])
-    #download the image
-    #imageDir<-imager::load.image(imagePath[!is.na(imagePath)][[i]])
-    #convert the image size to something smaller:
-    #img_resized <- imager::resize(imageDir, size_x = width, size_y =  height)
-    
-    ########## CONVERT TO GRAYSCALE OR GET TGB RATIOS ######
-    ## Convert to grayscale 
-    img_gray <- imager::grayscale(imagesRaw[[i]])
-    ## or create ratio of RGB vectors:
-    ############## Decide what to do here ########
+  # img_vector<-list()
+  # for(i in 1:length(imagesRaw)){ #length(imagePath[!is.na(imagePath)])
+  #   #download the image
+  #   #imageDir<-imager::load.image(imagePath[!is.na(imagePath)][[i]])
+  #   #convert the image size to something smaller:
+  #   #img_resized <- imager::resize(imageDir, size_x = width, size_y =  height)
+  #   
+  #   ########## CONVERT TO GRAYSCALE OR GET TGB RATIOS ######
+  #   ## Convert to grayscale 
+  #   img_gray <- imager::grayscale(imagesRaw[[i]])
+  #   ## or create ratio of RGB vectors:
+  #   ############## Decide what to do here ########
+  #   ## Set to grayscale
+  #   #grayimg[[i]] <- imager::grayscale(img_resized)
+  #   #plot image and get date for title:
+  #   #date_plot<-stringr::str_sub(imagePath[!is.na(imagePath)][[i]],-21,-12)
+  #   #plot(grayimg[[i]],main=date_plot)
+  #   ## Get the image as a matrix
+  #   img_matrix <- as.matrix(imagesRaw[[i]])
+  #   #img_matrix <- as.matrix(img_gray)
+  #   #grayimg@.Data
+  #   ## Coerce to a vector
+  #   img_vector[[i]] <- as.vector(t(img_matrix))
+  # }
+  
+
+  feature_list <- pblapply(names(imagesRaw), function(imgname) {
+    ######## USING IMAGER ######
+    #check to see if the file is .rds or an image:
+    filetype<-ifelse(length(grep(".jpg|.png|.jpeg|.bmp",imgname))!=0,"image","rds")
+    if(filetype=="rds"){
+      #open the image data:
+      img <- readRDS(file.path(dir_path, imgname))
+    }
+    else{
+      #open the image:
+      img <- imager::load.image(file.path(dir_path, imgname))
+    }
+    ## Resize image (already resized before saving in the downloadFloodImages.R file)
+    #img_resized <- imager::resize(img, size_x = width, size_y =  height)
     ## Set to grayscale
-    #grayimg[[i]] <- imager::grayscale(img_resized)
-    #plot image and get date for title:
-    #date_plot<-stringr::str_sub(imagePath[!is.na(imagePath)][[i]],-21,-12)
-    #plot(grayimg[[i]],main=date_plot)
+    grayimg <- imager::grayscale(img)
     ## Get the image as a matrix
-    #img_matrix <- as.matrix(imagesRaw[[i]][,,,1])/as.matrix(imagesRaw[[i]][,,,2])
-    img_matrix <- as.matrix(img_gray)
+    img_matrix <- as.matrix(grayimg)
     #grayimg@.Data
     ## Coerce to a vector
-    img_vector[[i]] <- as.vector(t(img_matrix))
-  }
+    img_vector <- as.vector(t(img_matrix))
+    ######## USING IMAGER ######
+    return(img_vector)
+  })
+
   ## bind the list of vector into matrix
-  feature_matrix <- do.call(rbind, img_vector)
+  feature_matrix <- do.call(rbind, feature_list)
   feature_matrix <- as.data.frame(feature_matrix)
+  
+  ## Set names
+  names(feature_matrix) <- paste0("pixel", c(1:img_size))
+  
+  ## bind the list of vector into matrix
+  #feature_matrix <- do.call(rbind, img_vector)
+  #feature_matrix <- as.data.frame(feature_matrix)
   #add the image names to the feature_matrix to preserve traceability:
-  feature_matrix$metaname<-gsub("_solarNoon|sunrise|sunset","",names(imagesRaw))
+  feature_matrix$metaname<-gsub("img_small_|_solarNoon|sunrise|sunset|.rds","",names(imagesRaw))
   
   #open the metadata file:
   #siteMetadata<-read.csv(paste0(picSite,"_metadata.csv"),header = T,stringsAsFactors = F)
@@ -99,12 +110,26 @@ floodAnalysis<-function(picTime="solarNoon"){
   #add labels:
   label<-metadata.full$tag
   ## Add label
-  feature_matrix <- cbind(label = label, feature_matrix)
-  #remove the metaname and posix columns:
   rmvCol<-grep("metaname|posix",names(feature_matrix))
   if(length(rmvCol)!=0){
     feature_matrix<-feature_matrix[,-rmvCol]
   }
+  feature_matrix <- list(X = feature_matrix, y = label)
+  browser()
+  
+  
+  # Check processing on random image
+  par(mar = rep(0, 4))
+  randoImg <- t(matrix(as.numeric(feature_matrix$X[2,]),
+                       nrow = width, ncol = height, T))
+  image(t(apply(randoImg, 2, rev)), col = gray.colors(12),
+        axes = F)
+  
+  
+  
+    #cbind(label = label, feature_matrix)
+  #remove the metaname and posix columns:
+  
   #}
   
   ### manual labels ####

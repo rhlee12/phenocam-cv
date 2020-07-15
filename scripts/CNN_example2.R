@@ -10,6 +10,7 @@ library(keras)
 #The classes are mutually exclusive and there is no overlap between them
 cifar <- dataset_cifar10()
 
+##50,000 images at 32x32x3; RGB streams are present here; it's not grayscale
 
 ##### Verify the data ####
 class_names <- c('airplane', 'automobile', 'bird', 'cat', 'deer',

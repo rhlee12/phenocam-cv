@@ -39,18 +39,38 @@ extract_feature <- function(dir_path, width, height, labelsExist = T,batchSize=N
   print(paste("Start processing", length(images_names), "images"))
   ## This function will resize an image, turn it into greyscale
   feature_list <- pblapply(images_names, function(imgname) {
+    ######## USING IMAGER ######
     ## Read image
-    img <- readImage(file.path(dir_path, imgname))
+    img <- imager::load.image(file.path(dir_path, imgname))
     ## Resize image
-    img_resized <- resize(img, w = width, h = height)
-    ## Set to grayscale (normalized to max)
-    grayimg <- channel(img_resized, "gray")
+    img_resized <- imager::resize(img, size_x = width, size_y =  height)
+    browser()
+    ## Set to grayscale
+    grayimg <- imager::grayscale(img_resized)
     ## Get the image as a matrix
-    img_matrix <- grayimg@.Data
-    ## Coerce to a vector (row-wise)
+    img_matrix <- as.matrix(grayimg)
+    #grayimg@.Data
+    ## Coerce to a vector
     img_vector <- as.vector(t(img_matrix))
+    ######## USING IMAGER ######
+    
+    # ######## OR USING EBImage #####
+    # ## Read image
+    # img <- readImage(file.path(dir_path, imgname))
+    # ## Resize image
+    # img_resized <- resize(img, w = width, h = height)
+    # ## Set to grayscale (normalized to max)
+    # grayimg <- channel(img_resized, "gray")
+    # ## Get the image as a matrix
+    # img_matrix <- grayimg@.Data
+    # ## Coerce to a vector (row-wise)
+    # img_vector <- as.vector(t(img_matrix))
+    # ######## OR USING EBImage #####
+    
+    
     return(img_vector)
   })
+  
   ## bind the list of vector into matrix
   feature_matrix <- do.call(rbind, feature_list)
   feature_matrix <- as.data.frame(feature_matrix)
@@ -65,7 +85,7 @@ extract_feature <- function(dir_path, width, height, labelsExist = T,batchSize=N
 }
 
 ### [START] Create training and test datasets and save them ###
-trainData <- extract_feature(dir_path = imageDir, width, height,batchSize = NA)
+trainData2 <- extract_feature(dir_path = imageDir, width, height,batchSize = 0.3)
 # Takes slightly less
 testData <- extract_feature(dir_path = imageDir, width, height, labelsExist = F,batchSize = NA)
 #saveRDS(trainData, file = "C:/Users/jroberti/Git/phenocam-cv/data/trainCatsDogs.rds")
