@@ -15,36 +15,10 @@ floodAnalysis<-function(picTime="solarNoon"){
   #open 1 to get the height and width of the image:
   dir_path<-getwd()
   img_test <- readRDS(file.path(dir_path, names(imagesRaw)[1]))
-  img_size <- dim(img_test)[1]*dim(img_test)[2]
-    #gsub(".rds","",substr(openThese.cln,11,nchar(openThese.cln)))
-  
-  #browser()
-  
-  #}else{
-  # img_vector<-list()
-  # for(i in 1:length(imagesRaw)){ #length(imagePath[!is.na(imagePath)])
-  #   #download the image
-  #   #imageDir<-imager::load.image(imagePath[!is.na(imagePath)][[i]])
-  #   #convert the image size to something smaller:
-  #   #img_resized <- imager::resize(imageDir, size_x = width, size_y =  height)
-  #   
-  #   ########## CONVERT TO GRAYSCALE OR GET TGB RATIOS ######
-  #   ## Convert to grayscale 
-  #   img_gray <- imager::grayscale(imagesRaw[[i]])
-  #   ## or create ratio of RGB vectors:
-  #   ############## Decide what to do here ########
-  #   ## Set to grayscale
-  #   #grayimg[[i]] <- imager::grayscale(img_resized)
-  #   #plot image and get date for title:
-  #   #date_plot<-stringr::str_sub(imagePath[!is.na(imagePath)][[i]],-21,-12)
-  #   #plot(grayimg[[i]],main=date_plot)
-  #   ## Get the image as a matrix
-  #   img_matrix <- as.matrix(imagesRaw[[i]])
-  #   #img_matrix <- as.matrix(img_gray)
-  #   #grayimg@.Data
-  #   ## Coerce to a vector
-  #   img_vector[[i]] <- as.vector(t(img_matrix))
-  # }
+  width<-dim(img_test)[1]
+  height<-dim(img_test)[2]
+  img_size <- width*height
+    
   
 
   feature_list <- pblapply(names(imagesRaw), function(imgname) {
@@ -59,13 +33,12 @@ floodAnalysis<-function(picTime="solarNoon"){
       #open the image:
       img <- imager::load.image(file.path(dir_path, imgname))
     }
-    ## Resize image (already resized before saving in the downloadFloodImages.R file)
-    #img_resized <- imager::resize(img, size_x = width, size_y =  height)
+    ## Resize image (some of these need to be converted to ensure they're all the same size)
+    img_resized <- imager::resize(img, size_x = width, size_y =  height)
     ## Set to grayscale
-    grayimg <- imager::grayscale(img)
+    grayimg <- imager::grayscale(img_resized)
     ## Get the image as a matrix
     img_matrix <- as.matrix(grayimg)
-    #grayimg@.Data
     ## Coerce to a vector
     img_vector <- as.vector(t(img_matrix))
     ######## USING IMAGER ######
@@ -75,7 +48,6 @@ floodAnalysis<-function(picTime="solarNoon"){
   ## bind the list of vector into matrix
   feature_matrix <- do.call(rbind, feature_list)
   feature_matrix <- as.data.frame(feature_matrix)
-  
   ## Set names
   names(feature_matrix) <- paste0("pixel", c(1:img_size))
   
@@ -115,9 +87,8 @@ floodAnalysis<-function(picTime="solarNoon"){
     feature_matrix<-feature_matrix[,-rmvCol]
   }
   feature_matrix <- list(X = feature_matrix, y = label)
+
   browser()
-  
-  
   # Check processing on random image
   par(mar = rep(0, 4))
   randoImg <- t(matrix(as.numeric(feature_matrix$X[2,]),
@@ -126,8 +97,36 @@ floodAnalysis<-function(picTime="solarNoon"){
         axes = F)
   
   
+  ####create training and testing datasets #####
+  library(caret)
+  training_index <- createDataPartition(feature_matrix$y, p = .8, times = 1)
+  training_index <- unlist(training_index,use.names = F)
+  trainData <- list(X=feature_matrix$X[training_index,],
+                    y=feature_matrix$y[training_index])
+  # Fix structure for 2d CNN
+  train_array <- t(trainData$X)
+  dim(train_array) <- c(height, width, nrow(trainData$X), 1)
+  # Reorder dimensions (will now be numImages x height x width x colDimension)
+  train_array <- aperm(train_array, c(3,1,2,4))
+  #create the test set: (for some reason you need to manually include the first index in here or it won't work)
+  testData <- list(X=feature_matrix$X[unique(c(1,which(!seq(1:nrow(feature_matrix$X)) %in% training_index))),],
+                   y=feature_matrix$y[unique(c(1,which(!seq(1:nrow(feature_matrix$X)) %in% training_index)))])
+  #
+  #fix structure for 2d CNN:
+  test_array <- t(testData$X)
+  dim(test_array) <- c(height, width, nrow(testData$X), 1)
+  # Reorder dimensions (will now be numImages x height x width x colDimension)
+  test_array <- aperm(test_array, c(3,1,2,4))
   
-    #cbind(label = label, feature_matrix)
+  # Check random image again
+  randoImg <- train_array[2,,,]
+  image(t(apply(randoImg, 2, rev)), col = gray.colors(12),
+        axes = F)
+  
+  
+  
+  
+  #cbind(label = label, feature_matrix)
   #remove the metaname and posix columns:
   
   #}
@@ -152,7 +151,7 @@ floodAnalysis<-function(picTime="solarNoon"){
   ## Bind rows in a single dataset
   #complete_set <- rbind(cats_data, dogs_data)
   ## test/training partitions
-  training_index <- createDataPartition(feature_matrix$label, p = .8, times = 1)
+  training_index <- createDataPartition(feature_matrix$y, p = .8, times = 1)
   training_index <- unlist(training_index)
   train_set <- feature_matrix[training_index,]
   dim(train_set)
