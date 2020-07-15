@@ -14,7 +14,7 @@
 #' @export
 #'
 
-getPhenoUrls=function(site, year=NULL, date, time="1200",IR=T,domn=domain){
+getPhenoUrls=function(site, TIS=T, year=NULL, date, time="1200",IR=T,domn=domain){
   library(Z10)
   #siteMeta=Z10::get.site.meta(site)
   # What domain is our site?
@@ -40,8 +40,11 @@ getPhenoUrls=function(site, year=NULL, date, time="1200",IR=T,domn=domain){
     }
     
     #if this is a NEON site:
-    if(!is.na(domn)){
+    if(!is.na(domn) & TIS==T){
       baseUrl=paste0("https://phenocam.sr.unh.edu/webcam/browse/NEON.", domn, ".", site, ".DP1.00042/", year, "/", monthDays)
+    }
+    else if(!is.na(domn) & TIS==F){
+      baseUrl=paste0("https://phenocam.sr.unh.edu/webcam/browse/NEON.", domn, ".", site, ".DP1.20002/", year, "/", monthDays)
     }
     else{
       #if this is not a NEON site:
@@ -74,8 +77,12 @@ getPhenoUrls=function(site, year=NULL, date, time="1200",IR=T,domn=domain){
     return(allUrls)
   }else if(!missing(date)){
     #if this is a NEON site:
-    if(!is.na(domn)){
+    if(!is.na(domn) & TIS==T){
       baseUrl=paste0("https://phenocam.sr.unh.edu/webcam/browse/NEON.", domn, ".", site, ".DP1.00042/", gsub(pattern = "-", replacement = "/", x = date))
+    }
+    else if(!is.na(domn) & TIS==F){
+      #if this is not a NEON site:
+      baseUrl=paste0("https://phenocam.sr.unh.edu/webcam/browse/NEON.", domn, ".", site, ".DP1.20002/", gsub(pattern = "-", replacement = "/", x = date))
     }
     else{
       #if this is not a NEON site:

@@ -159,12 +159,12 @@ model %>% compile(
   optimizer = "adam",
   metrics = c('accuracy')
 )
-browser()
+
 history <- model %>% fit(
   x = train_array, y = as.numeric(trainData$y), 
   epochs = 15, 
   #validation_data = list(x=test_array,y=as.numeric(testData$y))
-  validation_split = 0.2
+  validation_split = 0.2 # will hold out 0.X of training data for validation.
 )
 
 plot(history)
@@ -178,6 +178,9 @@ set.seed(100)
 random <- sample(1:nrow(testData$X), 32)
 preds <- predictions[random,]
 probs <- as.vector(round(probabilities[random,], 2))
+
+#get the accuracy of the model:
+acc.df<-
 
 par(mfrow = c(4, 8), mar = rep(0, 4))
 for(i in 1:length(random)){

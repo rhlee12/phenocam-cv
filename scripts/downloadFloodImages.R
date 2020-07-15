@@ -40,7 +40,7 @@ CatchupPause <- function(Secs){
   gc()
 }
 
-downloadFloodImages<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="2019-12-31",picTime="solarNoon",
+downloadFloodImages<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="2019-12-31",picTime="solarNoon", siteTIS=F,
                         picIR=F,rerun=F,useGMT=F){
   #set seed for traceability:
   library(magrittr)
@@ -213,7 +213,7 @@ downloadFloodImages<-function(picSite="DELA",dateStart="2019-01-01",dateEnd="201
     }
     imagePath<-list()
     for(j in 1:length(info.sun.use$picTimeHHMM)){
-      imagePath[[j]]<-getPhenoUrls(site = picSite,year = substr(dateStart,0,4),date = info.sun.use$date[j],
+      imagePath[[j]]<-getPhenoUrls(site = picSite, TIS=siteTIS, year = substr(dateStart,0,4),date = info.sun.use$date[j],
                                    time = info.sun.use$picTimeHHMM[j],IR=picIR,domn=domain)
       #pause so I don't overload system:
       CatchupPause(1)
