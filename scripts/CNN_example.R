@@ -44,7 +44,6 @@ extract_feature <- function(dir_path, width, height, labelsExist = T,batchSize=N
     img <- imager::load.image(file.path(dir_path, imgname))
     ## Resize image
     img_resized <- imager::resize(img, size_x = width, size_y =  height)
-    browser()
     ## Set to grayscale
     grayimg <- imager::grayscale(img_resized)
     ## Get the image as a matrix
@@ -85,7 +84,7 @@ extract_feature <- function(dir_path, width, height, labelsExist = T,batchSize=N
 }
 
 ### [START] Create training and test datasets and save them ###
-trainData2 <- extract_feature(dir_path = imageDir, width, height,batchSize = 0.3)
+trainData <- extract_feature(dir_path = imageDir, width, height,batchSize = 0.3)
 # Takes slightly less
 testData <- extract_feature(dir_path = imageDir, width, height, labelsExist = F,batchSize = NA)
 #saveRDS(trainData, file = "C:/Users/jroberti/Git/phenocam-cv/data/trainCatsDogs.rds")
