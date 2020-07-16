@@ -17,8 +17,6 @@ width<-dim(img_test)[1]
 height<-dim(img_test)[2]
 img_size <- width*height
   
-
-
 feature_list <- pblapply(names(imagesRaw), function(imgname) {
   ######## USING IMAGER ######
   #check to see if the file is .rds or an image:
@@ -77,6 +75,17 @@ for(j in 1:length(sites)){
 site.meta.df<-do.call(rbind,site.meta.lst)
 #merge 'site.meta.df' with 'feature_matrix'
 metadata.full<-merge(site.meta.df,feature_matrix,by="metaname")
+#remove any instances where the tag is "" or NA:
+rmvInds<-which(metadata.full$tag=="" | is.na(metadata.full$tag))
+if(length(rmvInds)!=0){
+  metadata.full<-metadata.full[-rmvInds,]
+}
+
+#rmv Partial Snow and partial flood instances:
+rmvPartialImgs<-grep("PARTIAL|SNOW",metadata.full$tag)
+if(length(rmvPartialImgs)!=0){
+  metadata.full<-metadata.full[-rmvPartialImgs,]
+}
 #add labels:
 label<-metadata.full$tag
 ## Add label
@@ -103,7 +112,10 @@ trainData <- list(X=feature_matrix$X[training_index,],
                   y=feature_matrix$y[training_index])
 ##gsub the character data in trainData$y for numeric:
 trainData$y<-gsub("DRY",0,trainData$y)
-trainData$y<-gsub("FLOOD",1,trainData$y)
+trainData$y<-gsub("PARTIAL FLOOD",1,trainData$y)
+trainData$y<-gsub("FLOOD",2,trainData$y)
+trainData$y<-gsub("PARTIAL SNOW",3,trainData$y)
+trainData$y<-gsub("SNOW",4,trainData$y)
 # Fix structure for 2d CNN
 train_array <- t(trainData$X)
 dim(train_array) <- c(height, width, nrow(trainData$X), 1)
@@ -113,7 +125,10 @@ train_array <- aperm(train_array, c(3,1,2,4))
 testData <- list(X=feature_matrix$X[unique(c(1,which(!seq(1:nrow(feature_matrix$X)) %in% training_index))),],
                  y=feature_matrix$y[unique(c(1,which(!seq(1:nrow(feature_matrix$X)) %in% training_index)))])
 testData$y<-gsub("DRY",0,testData$y)
-testData$y<-gsub("FLOOD",1,testData$y)
+testData$y<-gsub("PARTIAL FLOOD",1,testData$y)
+testData$y<-gsub("FLOOD",2,testData$y)
+testData$y<-gsub("PARTIAL SNOW",3,testData$y)
+testData$y<-gsub("SNOW",4,testData$y)
 #fix structure for 2d CNN:
 test_array <- t(testData$X)
 dim(test_array) <- c(height, width, nrow(testData$X), 1)
