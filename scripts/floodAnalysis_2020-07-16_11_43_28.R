@@ -55,7 +55,7 @@ feature_matrix$metaname<-gsub("img_small_|_solarNoon|sunrise|sunset|.rds","",nam
 
 #open the metadata file:
 #siteMetadata<-read.csv(paste0(picSite,"_metadata.csv"),header = T,stringsAsFactors = F)
-siteMetadata<-read.csv("C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/site_metadata.csv",header = T,stringsAsFactors = F)
+siteMetadata<-read.csv("C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/site_metadata_2.csv",header = T,stringsAsFactors = F)
 #get site names:
 sites<-names(siteMetadata)[2:ncol(siteMetadata)]
 #convert stupid excel dates to POSIX:
@@ -81,24 +81,32 @@ if(length(rmvInds)!=0){
   metadata.full<-metadata.full[-rmvInds,]
 }
 
-#rmv Partial Snow and partial flood instances:
-rmvPartialImgs<-grep("PARTIAL|SNOW",metadata.full$tag)
+#rmv 'Partial' instances:
+rmvPartialImgs<-grep("PARTIAL",metadata.full$tag)
 if(length(rmvPartialImgs)!=0){
   metadata.full<-metadata.full[-rmvPartialImgs,]
 }
 #add labels:
 label<-metadata.full$tag
 ## Add label
-rmvCol<-grep("metaname|posix",names(feature_matrix))
+#rmvCol<-grep("metaname|posix",names(feature_matrix))
+#need to remove the 'tag' column too.  We're reassigning it as "label" in $y component
+rmvCol<-grep("metaname|posix|tag",names(metadata.full)) 
+#grab the metaname column and keep this. Want to keep these with the data for reference after model is fit:
+metaColumn<-grep("metaname",names(metadata.full))
 if(length(rmvCol)!=0){
-  feature_matrix<-feature_matrix[,-rmvCol]
+  #keep metacolumn for traceability
+  metanames<-metadata.full[,metaColumn]
+  #feature_matrix<-feature_matrix[,-rmvCol]
+  metadata.full<-metadata.full[,-rmvCol]
 }
-feature_matrix <- list(X = feature_matrix, y = label)
+metadata.full <- list(X = metadata.full, y = label,z=metanames)
+#feature_matrix <- list(X = feature_matrix, y = label)
 
 #browser()
 # Check processing on random image
 par(mar = rep(0, 4))
-randoImg <- t(matrix(as.numeric(feature_matrix$X[2,]),
+randoImg <- t(matrix(as.numeric(metadata.full$X[2,]),
                      nrow = width, ncol = height, T))
 image(t(apply(randoImg, 2, rev)), col = gray.colors(12),
       axes = F)
@@ -106,29 +114,31 @@ image(t(apply(randoImg, 2, rev)), col = gray.colors(12),
 
 ####create training and testing datasets #####
 library(caret)
-training_index <- createDataPartition(feature_matrix$y, p = .8, times = 1)
+training_index <- createDataPartition(metadata.full$y, p = .8, times = 1)
 training_index <- unlist(training_index,use.names = F)
-trainData <- list(X=feature_matrix$X[training_index,],
-                  y=feature_matrix$y[training_index])
+trainData <- list(X=metadata.full$X[training_index,],
+                  y=metadata.full$y[training_index],
+                  z=metadata.full$z[training_index])
 ##gsub the character data in trainData$y for numeric:
 trainData$y<-gsub("DRY",0,trainData$y)
-trainData$y<-gsub("PARTIAL FLOOD",1,trainData$y)
-trainData$y<-gsub("FLOOD",2,trainData$y)
-trainData$y<-gsub("PARTIAL SNOW",3,trainData$y)
-trainData$y<-gsub("SNOW",4,trainData$y)
+#trainData$y<-gsub("PARTIAL FLOOD",1,trainData$y)
+trainData$y<-gsub("FLOOD",1,trainData$y)
+# trainData$y<-gsub("PARTIAL SNOW","SNOW",trainData$y)
+ trainData$y<-gsub("SNOW",2,trainData$y)
 # Fix structure for 2d CNN
 train_array <- t(trainData$X)
 dim(train_array) <- c(height, width, nrow(trainData$X), 1)
 # Reorder dimensions (will now be numImages x height x width x colDimension)
 train_array <- aperm(train_array, c(3,1,2,4))
 #create the test set: (for some reason you need to manually include the first index in here or it won't work)
-testData <- list(X=feature_matrix$X[unique(c(1,which(!seq(1:nrow(feature_matrix$X)) %in% training_index))),],
-                 y=feature_matrix$y[unique(c(1,which(!seq(1:nrow(feature_matrix$X)) %in% training_index)))])
+testData <- list(X=metadata.full$X[unique(c(1,which(!seq(1:nrow(metadata.full$X)) %in% training_index))),],
+                 y=metadata.full$y[unique(c(1,which(!seq(1:nrow(metadata.full$X)) %in% training_index)))],
+                 z=metadata.full$z[unique(c(1,which(!seq(1:nrow(metadata.full$X)) %in% training_index)))])
 testData$y<-gsub("DRY",0,testData$y)
-testData$y<-gsub("PARTIAL FLOOD",1,testData$y)
-testData$y<-gsub("FLOOD",2,testData$y)
-testData$y<-gsub("PARTIAL SNOW",3,testData$y)
-testData$y<-gsub("SNOW",4,testData$y)
+#testData$y<-gsub("PARTIAL FLOOD",1,testData$y) #
+testData$y<-gsub("FLOOD",1,testData$y)
+# testData$y<-gsub("PARTIAL SNOW","SNOW",testData$y)
+testData$y<-gsub("SNOW",2,testData$y)
 #fix structure for 2d CNN:
 test_array <- t(testData$X)
 dim(test_array) <- c(height, width, nrow(testData$X), 1)
@@ -141,6 +151,7 @@ image(t(apply(randoImg, 2, rev)), col = gray.colors(12),
       axes = F)
 
 
+############# [START] MODEL BELOW WORKS WITH JUST FLOOD AND DRY #############
 # Build CNN model
 model <- keras_model_sequential() 
 model %>% 
@@ -181,6 +192,55 @@ history <- model %>% fit(
   #validation_data = list(x=test_array,y=as.numeric(testData$y))
   validation_split = 0.2 # will hold out 0.X of training data for validation.
 )
+############# [END] MODEL BELOW WORKS WITH JUST FLOOD AND DRY #############
+
+
+########## [START] MODEL TAKEN FROM CNN_example2; trying to see if it will work with snow #####model <- keras_model_sequential() %>% 
+model <- keras_model_sequential() %>% 
+  layer_conv_2d(filters = 32, kernel_size = c(3,3), activation = "relu", 
+                input_shape = c(height,width,1)) %>% 
+  layer_max_pooling_2d(pool_size = c(2,2)) %>% 
+  layer_conv_2d(filters = 64, kernel_size = c(3,3), activation = "relu") %>% 
+  layer_max_pooling_2d(pool_size = c(2,2)) %>% 
+  layer_conv_2d(filters = 64, kernel_size = c(3,3), activation = "relu")
+
+#Let's display the architecture of our model so far.
+#the output of every Conv2D and MaxPooling2D layer is a 3D tensor of shape (height, width, channels). 
+#The width and height dimensions tend to shrink as you go deeper in the network. 
+#The number of output channels for each Conv2D layer is controlled by the first argument (e.g., 32 or 64). 
+#Typically, as the width and height shrink, you can afford (computationally) to add more output channels in each Conv2D layer.
+summary(model)
+
+
+####Add Dense layers on top
+#To complete our model, you will feed the last output tensor from the convolutional base (of shape (3, 3, 64)) 
+#into one or more Dense layers to perform classification. 
+#Dense layers take vectors as input (which are 1D), while the current output is a 3D tensor. 
+#First, you will flatten (or unroll) the 3D output to 1D, then add one or more Dense layers on top. 
+#CIFAR has 10 output classes, so you use a final Dense layer with 10 outputs and a softmax activation.
+model %>% 
+  layer_flatten() %>% 
+  layer_dense(units = 64, activation = "relu") %>% 
+  layer_dense(units = 10, activation = "softmax")
+#Note Keras models are mutable objects and you don't need to re-assign model in the chubnk above.
+summary(model) 
+#As you can see, our (3, 3, 64) outputs were flattened into vectors of shape (576) before going through two Dense layers
+
+#####Compile and train the model
+model %>% compile(
+  optimizer = "adam",
+  loss = "sparse_categorical_crossentropy",
+  metrics = "accuracy"
+)
+
+history <- model %>% fit(
+  x = train_array, y = as.numeric(trainData$y), 
+  epochs = 15, 
+  #validation_data = list(x=test_array,y=as.numeric(testData$y))
+  validation_split = 0.2 # will hold out 0.X of training data for validation.
+)
+########## [END] MODEL TAKEN FROM CNN_example2; trying to see if it will work with snow #####
+
 
 plot(history)
 
@@ -188,18 +248,30 @@ plot(history)
 predictions <-  predict_classes(model, test_array)
 probabilities <- predict_proba(model, test_array)
 
-# Visual inspection of 32 cases
+#get the accuracy of the model on test set:
+acc.df<-data.frame(truth=testData$y,preds=predictions,probs=probabilities,image=testData$z)
+#create confusion matrix:
+confusionMatrix(data = as.factor(testData$y), as.factor(predictions))
+
+# Visual inspection of 8 cases
 set.seed(100)
-random <- sample(1:nrow(testData$X), 32)
-preds <- predictions[random,]
-probs <- as.vector(round(probabilities[random,], 2))
+#random <- sample(1:nrow(testData$X), 8)
+preds <- predictions#predictions[random,]
+probs <- as.vector(round(probabilities, 2)) #as.vector(round(probabilities[random,], 2))
 
-#get the accuracy of the model:
-acc.df<-
 
-par(mfrow = c(4, 8), mar = rep(0, 4))
+# par(mfrow = c(2, 4), mar = rep(0, 4))
+# for(i in 1:length(random)){
+#   image(t(apply(test_array[random[i],,,], 2, rev)),
+#         col = gray.colors(12), axes = F)
+#   legend("topright", legend = ifelse(preds[i] == 0, "DRY", "FLOOD"),
+#          text.col = ifelse(preds[i] == 0, 2, 4), bty = "n", text.font = 2)
+#   legend("topleft", legend = probs[i], bty = "n", col = "white")
+# }
+
+par(mfrow = c(2, 4), mar = rep(0, 4))
 for(i in 1:length(random)){
-  image(t(apply(test_array[random[i],,,], 2, rev)),
+  image(t(apply(test_array[i,,,], 2, rev)),
         col = gray.colors(12), axes = F)
   legend("topright", legend = ifelse(preds[i] == 0, "DRY", "FLOOD"),
          text.col = ifelse(preds[i] == 0, 2, 4), bty = "n", text.font = 2)
