@@ -151,50 +151,6 @@ image(t(apply(randoImg, 2, rev)), col = gray.colors(12),
       axes = F)
 
 
-############# [START] MODEL BELOW WORKS WITH JUST FLOOD AND DRY #############
-# Build CNN model
-# model <- keras_model_sequential() 
-# model %>% 
-#   layer_conv_2d(kernel_size = c(3, 3), filter = 32,
-#                 activation = "relu", padding = "same",
-#                 input_shape = c(height, width, 1),
-#                 data_format = "channels_last") %>%
-#   layer_conv_2d(kernel_size = c(3, 3), filter = 32,
-#                 activation = "relu", padding = "valid") %>%
-#   layer_max_pooling_2d(pool_size = 2) %>%
-#   #layer_dropout(rate = 0.25) %>%
-#   
-#   layer_conv_2d(kernel_size = c(3, 3), filter = 64, strides = 2,
-#                 activation = "relu", padding = "same") %>%
-#   layer_conv_2d(kernel_size = c(3, 3), filter = 64,
-#                 activation = "relu", padding = "valid") %>%
-#   layer_max_pooling_2d(pool_size = 2) %>%
-#   #layer_dropout(rate = 0.25) %>%
-#   
-#   layer_flatten() %>%
-#   layer_dense(units = 50, activation = "relu") %>% 
-#   layer_dropout(rate = 0.25) %>%
-#   layer_dense(units = 1, activation = "sigmoid")
-# 
-# summary(model)
-# 
-# 
-# #compile the model:
-# model %>% compile(
-#   loss = 'binary_crossentropy',
-#   optimizer = "adam",
-#   metrics = c('accuracy')
-# )
-# 
-# history <- model %>% fit(
-#   x = train_array, y = as.numeric(trainData$y), 
-#   epochs = 15, 
-#   #validation_data = list(x=test_array,y=as.numeric(testData$y))
-#   validation_split = 0.2 # will hold out 0.X of training data for validation.
-# )
-############# [END] MODEL BELOW WORKS WITH JUST FLOOD AND DRY #############
-
-
 ########## [START] MODEL TAKEN FROM CNN_example2; trying to see if it will work with snow #####model <- keras_model_sequential() %>% 
 model <- keras_model_sequential() %>% 
   layer_conv_2d(filters = 32, kernel_size = c(3,3), activation = "relu", 
@@ -270,16 +226,6 @@ set.seed(100)
 #random <- sample(1:nrow(testData$X), 8)
 #preds <- pred_class#predictions[random,]
 #probs <- as.vector(round(probabilities, 2)) #as.vector(round(probabilities[random,], 2))
-
-
-# par(mfrow = c(2, 4), mar = rep(0, 4))
-# for(i in 1:length(random)){
-#   image(t(apply(test_array[random[i],,,], 2, rev)),
-#         col = gray.colors(12), axes = F)
-#   legend("topright", legend = ifelse(preds[i] == 0, "DRY", "FLOOD"),
-#          text.col = ifelse(preds[i] == 0, 2, 4), bty = "n", text.font = 2)
-#   legend("topleft", legend = probs[i], bty = "n", col = "white")
-# }
 
 par(mfrow = c(2, 4), mar = rep(0, 4))
 for(i in 1:length(random)){
