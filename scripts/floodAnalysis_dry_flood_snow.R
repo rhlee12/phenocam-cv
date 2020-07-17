@@ -295,7 +295,7 @@ for(i in 1:length(random)){
 }
 
 #save the model:
-modelType<-
+modelType<-"dry_flood_snow"
 save(model, file = paste0("C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/CNNmodel_",modelType,".RData"))
 #gsub(" |:","_",Sys.time())
 
