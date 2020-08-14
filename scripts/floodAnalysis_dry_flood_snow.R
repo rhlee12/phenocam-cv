@@ -1,5 +1,9 @@
 
 setwd("C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/train/")
+library(pbapply)
+library(magrittr)
+library(keras)
+library(tensorflow)
 
 #openThese.raw<-sapply(paste0("img_small_",picSite,"_",getDates,"_",picTime,".rds"), function(x) list.files(pattern=x))
 openThese.raw<-sapply(paste0("*_solarNoon.rds"), function(x) list.files(pattern=x))
@@ -208,7 +212,7 @@ names(pred_prob)<-c("DRY","FLOOD","SNOW")
 probabilities <- predict_proba(model, test_array)
 #score <- model %>% evaluate(testData, testData$y, verbose = 0)
 #get the accuracy of the model on test set:
-acc.df<-data.frame(truth=testData$y,preds=predictions,probs=probabilities,image=testData$z)
+acc.df<-data.frame(truth=testData$y,preds=pred_class,probs=round(pred_prob,5),image=testData$z)
 
 # testData$y<-gsub("0","DRY",testData$y)
 # testData$y<-gsub("1","FLOOD",testData$y)
@@ -219,21 +223,21 @@ acc.df<-data.frame(truth=testData$y,preds=predictions,probs=probabilities,image=
 # predictions<-gsub("2","SNOW",predictions)
 
 #create confusion matrix:
-confusionMatrix(data = as.factor(testData$y), as.factor(predictions))
+confusionMatrix(data = as.factor(testData$y), as.factor(pred_class))
 
 # Visual inspection of 8 cases
 set.seed(100)
-#random <- sample(1:nrow(testData$X), 8)
+random <- c(148,sample(1:nrow(testData$X), 7))
 #preds <- pred_class#predictions[random,]
 #probs <- as.vector(round(probabilities, 2)) #as.vector(round(probabilities[random,], 2))
 
 par(mfrow = c(2, 4), mar = rep(0, 4))
 for(i in 1:length(random)){
-  image(t(apply(test_array[i,,,], 2, rev)),
+  image(t(apply(test_array[random[i],,,], 2, rev)),
         col = gray.colors(12), axes = F)
-  legend("topright", legend = paste0(names(which.max(pred_prob[i,]))," \n", 
-                                     round(pred_prob[i,][which.max(pred_prob[i,])],3)), bty = "n", 
-         text.col = "blue", text.font = 2)
+  legend("topleft", legend = paste0(names(pred_prob[random[i],]),"  ", 
+                                     round(pred_prob[random[i],],3),"\n"), 
+         text.col = "blue", text.font = 2, bg='white')
          #text.col = ifelse(preds[i] == 0, 2, 4), 
   # legend("topright", legend = ifelse(preds[i] == 0, "DRY", "FLOOD"),
   #        text.col = ifelse(preds[i] == 0, 2, 4), bty = "n", text.font = 2)
@@ -241,7 +245,7 @@ for(i in 1:length(random)){
 }
 
 #save the model:
-modelType<-"dry_flood_snow"
+modelType<-"dry_flood_snow_2020-08-14"
 save(model, file = paste0("C:/Users/jroberti/Git/phenocam-cv/data/floodDetection/CNNmodel_",modelType,".RData"))
 #gsub(" |:","_",Sys.time())
 
